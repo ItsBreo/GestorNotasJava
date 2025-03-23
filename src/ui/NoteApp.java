@@ -1,129 +1,233 @@
 package ui;
 
-import logic.NoteManager;
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.*;
-import java.util.List;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import java.io.*;
 
 public class NoteApp extends JFrame {
-    private String userEmail;
     private JTextField titleField, searchField;
     private JTextArea contentArea;
     private JList<String> noteList;
     private DefaultListModel<String> listModel;
-    private JButton saveButton, deleteButton, clearButton, logoutButton;
-    private JCheckBox autoSaveCheck;
-    private boolean autoSaveEnabled = false;
+    private JButton saveButton, editButton, deleteButton, clearButton, searchButton, logoutButton;
+    private JCheckBox autoSaveCheckBox;
+    private Timer autoSaveTimer;
+    private String currentUser;
 
-    public NoteApp(String userEmail) {
-        this.userEmail = userEmail;
-        setTitle("Creador de Notas - " + userEmail);
-        setSize(600, 450);
+    public NoteApp(String user) {
+        currentUser = user;
+        setTitle("Creador de Notas - " + currentUser);
+        setSize(750, 550);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLayout(new BorderLayout());
+        setLocationRelativeTo(null);
+        setLayout(new BorderLayout(10, 10));
 
+        // Creamos el modelo de la lista de notas
         listModel = new DefaultListModel<>();
         noteList = new JList<>(listModel);
+        noteList.setFont(new Font("Arial", Font.PLAIN, 14));
         noteList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        noteList.addListSelectionListener(e -> loadSelectedNote());
+        noteList.setBackground(new Color(245, 245, 245));
 
-        titleField = new JTextField(20);
-        contentArea = new JTextArea(10, 20);
-        contentArea.setWrapStyleWord(true);
+        // Cargar las notas del usuario
+        loadUserNotes();
+
+        // Panel principal para todo el contenido
+        JPanel mainPanel = new JPanel();
+        mainPanel.setLayout(new BorderLayout(10, 10));
+        mainPanel.setBackground(new Color(245, 245, 245));
+
+        // Panel para los campos de entrada (título y contenido)
+        JPanel inputPanel = new JPanel();
+        inputPanel.setLayout(new BorderLayout(10, 10));
+        inputPanel.setBackground(new Color(255, 255, 255));
+        inputPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+
+        // Título (cambio a línea simple)
+        titleField = new JTextField();
+        titleField.setFont(new Font("Arial", Font.BOLD, 14));
+        titleField.setBackground(new Color(245, 245, 245));
+        titleField.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200), 1));
+        titleField.setPreferredSize(new Dimension(400, 30));
+
+        // Línea separadora
+        JSeparator separator = new JSeparator();
+        separator.setForeground(new Color(200, 200, 200));
+
+        // Contenido (campo grande de texto)
+        contentArea = new JTextArea(10, 30);
+        contentArea.setFont(new Font("Arial", Font.PLAIN, 14));
         contentArea.setLineWrap(true);
+        contentArea.setWrapStyleWord(true);
+        contentArea.setBackground(new Color(245, 245, 245));
+        contentArea.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200), 1));
+        contentArea.setPreferredSize(new Dimension(400, 200));
 
-        contentArea.addKeyListener(new KeyAdapter() {
-            public void keyReleased(KeyEvent e) {
-                if (autoSaveEnabled) saveNote();
-            }
-        });
+        inputPanel.add(new JLabel("Título:"), BorderLayout.NORTH);
+        inputPanel.add(titleField, BorderLayout.CENTER);
+        inputPanel.add(separator, BorderLayout.SOUTH);
+        inputPanel.add(new JScrollPane(contentArea), BorderLayout.SOUTH);
 
-        searchField = new JTextField(15);
-        searchField.addKeyListener(new KeyAdapter() {
-            public void keyReleased(KeyEvent e) {
-                searchNotes();
-            }
-        });
+        // Panel de la lista de notas
+        JPanel noteListPanel = new JPanel();
+        noteListPanel.setLayout(new BorderLayout(10, 10));
+        noteListPanel.setBackground(new Color(245, 245, 245));
+
+        noteListPanel.add(new JScrollPane(noteList), BorderLayout.CENTER);
+
+        // Panel de botones para las acciones
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.setLayout(new FlowLayout(FlowLayout.LEFT, 10, 10));
+        buttonPanel.setBackground(new Color(245, 245, 245));
 
         saveButton = new JButton("Guardar");
-        saveButton.addActionListener(e -> saveNote());
+        saveButton.setFont(new Font("Arial", Font.BOLD, 14));
+        saveButton.setBackground(new Color(0, 123, 255));
+        saveButton.setForeground(Color.WHITE);
+        saveButton.setFocusPainted(false);
+        saveButton.setPreferredSize(new Dimension(120, 35));
+
+        editButton = new JButton("Editar");
+        editButton.setFont(new Font("Arial", Font.BOLD, 14));
+        editButton.setBackground(new Color(255, 159, 28));
+        editButton.setForeground(Color.WHITE);
+        editButton.setFocusPainted(false);
+        editButton.setPreferredSize(new Dimension(120, 35));
 
         deleteButton = new JButton("Eliminar");
-        deleteButton.addActionListener(e -> deleteNote());
+        deleteButton.setFont(new Font("Arial", Font.BOLD, 14));
+        deleteButton.setBackground(new Color(220, 53, 69));
+        deleteButton.setForeground(Color.WHITE);
+        deleteButton.setFocusPainted(false);
+        deleteButton.setPreferredSize(new Dimension(120, 35));
 
         clearButton = new JButton("Limpiar");
-        clearButton.addActionListener(e -> clearFields());
+        clearButton.setFont(new Font("Arial", Font.BOLD, 14));
+        clearButton.setBackground(new Color(108, 117, 125));
+        clearButton.setForeground(Color.WHITE);
+        clearButton.setFocusPainted(false);
+        clearButton.setPreferredSize(new Dimension(120, 35));
 
-        logoutButton = new JButton("Cerrar Sesión");
-        logoutButton.addActionListener(e -> logout());
+        logoutButton = new JButton("Cerrar sesión");
+        logoutButton.setFont(new Font("Arial", Font.BOLD, 14));
+        logoutButton.setBackground(new Color(220, 53, 69));
+        logoutButton.setForeground(Color.WHITE);
+        logoutButton.setFocusPainted(false);
+        logoutButton.setPreferredSize(new Dimension(120, 35));
 
-        autoSaveCheck = new JCheckBox("Guardar automáticamente");
-        autoSaveCheck.addItemListener(e -> autoSaveEnabled = autoSaveCheck.isSelected());
+        // Añadimos el checkbox para habilitar o deshabilitar el auto-guardado
+        autoSaveCheckBox = new JCheckBox("Guardar automáticamente");
+        autoSaveCheckBox.setFont(new Font("Arial", Font.PLAIN, 12));
+        autoSaveCheckBox.setBackground(new Color(245, 245, 245));
 
-        JPanel inputPanel = new JPanel(new GridLayout(3, 2));
-        inputPanel.add(new JLabel("Título:"));
-        inputPanel.add(titleField);
-        inputPanel.add(new JLabel("Contenido:"));
-        inputPanel.add(new JScrollPane(contentArea));
-
-        JPanel buttonPanel = new JPanel();
         buttonPanel.add(saveButton);
+        buttonPanel.add(editButton);
         buttonPanel.add(deleteButton);
         buttonPanel.add(clearButton);
-        buttonPanel.add(autoSaveCheck);
         buttonPanel.add(logoutButton);
+        buttonPanel.add(autoSaveCheckBox);
 
-        JPanel searchPanel = new JPanel();
-        searchPanel.add(new JLabel("Buscar:"));
-        searchPanel.add(searchField);
+        // Panel de búsqueda y cierre de sesión
+        JPanel topPanel = new JPanel();
+        topPanel.setLayout(new BorderLayout(10, 10));
+        topPanel.setBackground(new Color(245, 245, 245));
 
-        add(inputPanel, BorderLayout.NORTH);
-        add(new JScrollPane(noteList), BorderLayout.CENTER);
-        add(buttonPanel, BorderLayout.SOUTH);
-        add(searchPanel, BorderLayout.EAST);
+        searchButton = new JButton("Buscar");
+        searchButton.setFont(new Font("Arial", Font.BOLD, 14));
+        searchButton.setBackground(new Color(0, 123, 255));
+        searchButton.setForeground(Color.WHITE);
+        searchButton.setFocusPainted(false);
+        searchButton.setPreferredSize(new Dimension(120, 35));
 
-        loadNotes();
+        searchField = new JTextField();
+        searchField.setFont(new Font("Arial", Font.PLAIN, 14));
+        searchField.setPreferredSize(new Dimension(200, 30));
+
+        topPanel.add(new JLabel("Buscar notas:"), BorderLayout.WEST);
+        topPanel.add(searchField, BorderLayout.CENTER);
+        topPanel.add(searchButton, BorderLayout.EAST);
+
+        // Añadimos todos los paneles al panel principal
+        mainPanel.add(topPanel, BorderLayout.NORTH);
+        mainPanel.add(inputPanel, BorderLayout.CENTER);
+        mainPanel.add(noteListPanel, BorderLayout.EAST);
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+        add(mainPanel, BorderLayout.CENTER);
+
+        // Configurar el botón de cerrar sesión
+        logoutButton.addActionListener(e -> {
+            dispose();
+            new LoginUI();
+        });
+
+        // Acción del checkbox de guardar automáticamente
+        autoSaveCheckBox.addActionListener(e -> {
+            if (autoSaveCheckBox.isSelected()) {
+                autoSaveTimer.restart();
+            } else {
+                autoSaveTimer.stop();
+            }
+        });
+
+        // Guardar automáticamente después de 2 segundos de inactividad (si está activado el checkbox)
+        autoSaveTimer = new Timer(2000, e -> saveNote());
+        contentArea.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                if (autoSaveCheckBox.isSelected()) {
+                    autoSaveTimer.restart();
+                }
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                if (autoSaveCheckBox.isSelected()) {
+                    autoSaveTimer.restart();
+                }
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                if (autoSaveCheckBox.isSelected()) {
+                    autoSaveTimer.restart();
+                }
+            }
+        });
+
+        // Acciones de los botones
+        saveButton.addActionListener(e -> saveNote());
+        clearButton.addActionListener(e -> clearFields());
+        deleteButton.addActionListener(e -> deleteNote());
+        editButton.addActionListener(e -> editNote());
+        searchButton.addActionListener(e -> searchNote());
+
         setVisible(true);
     }
 
-    private void loadNotes() {
-        listModel.clear();
-        List<String> notes = NoteManager.loadNotes(userEmail);
-        for (String note : notes) {
-            listModel.addElement(note.split(":")[0]); // Solo mostramos el título
-        }
-    }
-
-    private void loadSelectedNote() {
-        String selectedTitle = noteList.getSelectedValue();
-        if (selectedTitle != null) {
-            titleField.setText(selectedTitle);
-            contentArea.setText(NoteManager.loadNoteContent(userEmail, selectedTitle));
-        }
-    }
-
     private void saveNote() {
-        String title = titleField.getText().trim();
-        String content = contentArea.getText().trim();
-        if (title.isEmpty() || content.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "El título y contenido no pueden estar vacíos.", "Error", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
+        String title = titleField.getText();
+        String content = contentArea.getText();
 
-        NoteManager.saveNote(userEmail, title, content);
-        if (!listModel.contains(title)) listModel.addElement(title);
-        JOptionPane.showMessageDialog(this, "Nota guardada correctamente.");
-    }
+        if (!title.isEmpty() && !content.isEmpty()) {
+            try {
+                // Guardar las notas del usuario en un archivo
+                File userFolder = new File("data/usuarios/" + currentUser);
+                if (!userFolder.exists()) {
+                    userFolder.mkdirs();
+                }
 
-    private void deleteNote() {
-        String selectedTitle = noteList.getSelectedValue();
-        if (selectedTitle != null) {
-            int confirm = JOptionPane.showConfirmDialog(this, "¿Eliminar esta nota?", "Confirmar", JOptionPane.YES_NO_OPTION);
-            if (confirm == JOptionPane.YES_OPTION) {
-                NoteManager.deleteNote(userEmail, selectedTitle);
-                listModel.removeElement(selectedTitle);
+                File noteFile = new File(userFolder, title + ".txt");
+                BufferedWriter writer = new BufferedWriter(new FileWriter(noteFile));
+                writer.write(content);
+                writer.close();
+
+                listModel.addElement(title); // Añadir el título de la nota a la lista
                 clearFields();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
     }
@@ -133,27 +237,63 @@ public class NoteApp extends JFrame {
         contentArea.setText("");
     }
 
-    private void searchNotes() {
-        String query = searchField.getText().trim().toLowerCase();
-        listModel.clear();
-        List<String> notes = NoteManager.loadNotes(userEmail);
-        for (String note : notes) {
-            if (note.toLowerCase().contains(query)) {
-                listModel.addElement(note.split(":")[0]);
+    private void loadUserNotes() {
+        File userFolder = new File("data/usuarios/" + currentUser);
+        if (userFolder.exists() && userFolder.isDirectory()) {
+            File[] noteFiles = userFolder.listFiles((dir, name) -> name.endsWith(".txt"));
+            for (File file : noteFiles) {
+                listModel.addElement(file.getName().replace(".txt", ""));
             }
         }
     }
 
-    private void logout() {
-        int confirm = JOptionPane.showConfirmDialog(this, "¿Cerrar sesión?", "Confirmar", JOptionPane.YES_NO_OPTION);
-        if (confirm == JOptionPane.YES_OPTION) {
-            dispose();
-            new LoginUI();
+    private void deleteNote() {
+        String selectedNote = noteList.getSelectedValue();
+        if (selectedNote != null) {
+            File userFolder = new File("data/usuarios/" + currentUser);
+            File noteFile = new File(userFolder, selectedNote + ".txt");
+
+            if (noteFile.delete()) {
+                listModel.removeElement(selectedNote);
+            } else {
+                JOptionPane.showMessageDialog(this, "Error al eliminar la nota.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void editNote() {
+        String selectedNote = noteList.getSelectedValue();
+        if (selectedNote != null) {
+            File userFolder = new File("data/usuarios/" + currentUser);
+            File noteFile = new File(userFolder, selectedNote + ".txt");
+
+            try (BufferedReader reader = new BufferedReader(new FileReader(noteFile))) {
+                String content = reader.readLine();
+                titleField.setText(selectedNote);
+                contentArea.setText(content);
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(this, "Error al cargar la nota para edición.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void searchNote() {
+        String query = searchField.getText().toLowerCase();
+        listModel.clear();
+
+        File userFolder = new File("data/usuarios/" + currentUser);
+        if (userFolder.exists() && userFolder.isDirectory()) {
+            File[] noteFiles = userFolder.listFiles((dir, name) -> name.endsWith(".txt"));
+            for (File file : noteFiles) {
+                String noteTitle = file.getName().replace(".txt", "");
+                if (noteTitle.toLowerCase().contains(query)) {
+                    listModel.addElement(noteTitle);
+                }
+            }
         }
     }
 
     public static void main(String[] args) {
-        // Aseguramos que la interfaz gráfica se ejecute en el hilo de eventos de Swing
-        SwingUtilities.invokeLater(() -> new LoginUI());
+        new LoginUI(); // Iniciar con el login
     }
 }
